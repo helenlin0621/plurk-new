@@ -70,6 +70,13 @@
     <li>已看紀錄和關鍵字存在這台電腦、這個瀏覽器的噗浪網站資料裡，換電腦或清除網站資料就會重來。已看紀錄保留 60 天；收藏不會自動刪，要自己取消。</li>
     <li>只讀不寫：不會替你回噗、按喜歡或做任何操作。</li>
   </ul>
+
+  <h2>解除安裝</h2>
+  <ol>
+    <li>在排行榜點「噗浪新噗」，按側欄最下面的「清除全部資料」，確認後會刪掉已看紀錄、收藏、關鍵字（噗浪的登入不受影響）。</li>
+    <li>在書籤列的「噗浪新噗」「收藏」上按右鍵 →「刪除」。</li>
+  </ol>
+  <p class="muted">只刪書籤不會清掉資料，所以要先做第 1 步。</p>
 </main>
 
 <script type="text/plain" id="src">
@@ -134,6 +141,22 @@
   const savedList = () => Object.entries(saved).map(([code, s]) => ({ code, text: s.t, at: s.at })).sort((a, b) => b.at - a.at);
   const unsave = code => { const s = load(SAVED, {}); delete s[code]; save(SAVED, s); render(); };
 
+  // 解除安裝用：清掉這工具存在噗浪網站資料裡的三樣東西，清完關掉側欄
+  const wipe = () => {
+    const nSeen = Object.keys(load(SEEN, {})).length, nSaved = Object.keys(load(SAVED, {})).length, nKw = load(KW, []).length;
+    if (!confirm('清除「噗浪新噗」在這台電腦存的全部資料？\n\n・已看紀錄 ' + nSeen + ' 筆\n・收藏 ' + nSaved + ' 則\n・關鍵字 ' + nKw + ' 個\n\n清掉就找不回來。噗浪本身的登入不受影響。')) return;
+    try { [SEEN, KW, SAVED].forEach(k => localStorage.removeItem(k)); } catch (e) { alert('清除失敗：瀏覽器不讓噗浪網站改資料'); return; }
+    box.remove();
+    alert('已清除。不再使用的話，把書籤列上的「噗浪新噗」和「收藏」按右鍵刪除即可。');
+  };
+  const footer = () => {
+    const f = el('div', 'padding:6px 12px;border-top:1px solid #eee;text-align:right');
+    const b = el('button', 'font:inherit;font-size:12px;padding:0;border:0;background:none;color:#999;text-decoration:underline;cursor:pointer', '清除全部資料');
+    b.onclick = wipe;
+    f.appendChild(b);
+    return f;
+  };
+
   const savedRow = s => {
     const r = el('div', 'display:flex;gap:8px;align-items:flex-start;padding:8px 12px;border-bottom:1px solid #eee');
     const a = el('a', 'flex:1;min-width:0;color:inherit;text-decoration:none');
@@ -195,7 +218,7 @@
       list.appendChild(el('div', 'padding:6px 12px;background:#f3f3f3;color:#888;font-size:12px', '被關鍵字隱藏的 ' + hidden.length + ' 則'));
       hidden.forEach(it => list.appendChild(row(it, hit(it))));
     }
-    box.appendChild(list);
+    box.append(list, footer());
   };
 
   // 上方分頁列：三個榜、全部、收藏
@@ -224,7 +247,7 @@
     const body = el('div', 'flex:1;overflow:auto');
     list.forEach(s => body.appendChild(savedRow(s)));
     if (!list.length) body.appendChild(el('div', 'padding:24px 12px;color:#888;text-align:center', '還沒有收藏的噗'));
-    box.appendChild(body);
+    box.append(body, footer());
   }
   // 從別的分頁收藏完回來，清單跟著更新（正在編輯關鍵字時不動，免得打到一半被洗掉）
   const onFocus = () => { if (!box.isConnected) return window.removeEventListener('focus', onFocus); if (!editing) render(); };
