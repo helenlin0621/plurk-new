@@ -1,0 +1,330 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>噗浪新噗篩選</title>
+<style>
+  :root { --bg: #fff; --fg: #222; --muted: #666; --line: #ddd; --accent: #ff574d; --code: #f5f5f5; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #1d1d1f; --fg: #eee; --muted: #aaa; --line: #444; --accent: #ff7a70; --code: #2a2a2d; }
+  }
+  body { margin: 0; background: var(--bg); color: var(--fg); font: 16px/1.7 system-ui, "Microsoft JhengHei", sans-serif; }
+  main { max-width: 720px; margin: 0 auto; padding: 32px 16px 64px; }
+  h1 { font-size: 26px; margin: 0 0 8px; }
+  h2 { font-size: 19px; margin: 32px 0 8px; }
+  p, li { color: var(--fg); }
+  .muted { color: var(--muted); }
+  .bm { display: inline-block; padding: 10px 18px; border-radius: 8px; background: var(--accent); color: #fff; font-weight: 700; text-decoration: none; cursor: grab; }
+  button { font: inherit; padding: 6px 14px; border-radius: 6px; border: 1px solid var(--line); background: var(--code); color: var(--fg); cursor: pointer; }
+  code { background: var(--code); padding: 1px 5px; border-radius: 4px; }
+  #msg { margin-left: 8px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>噗浪新噗篩選</h1>
+  <p class="muted">在噗浪的話題排行榜（plurk.com/top）點一下書籤，只列出你還沒看過的熱門噗；回應、喜歡、轉噗三個榜可以切換或合併，每天固定開新噗的串可以設關鍵字隱藏。</p>
+
+  <h2>安裝</h2>
+  <p>把下面這個按鈕<strong>拖到 Chrome 的書籤列</strong>（書籤列沒顯示的話，按 <code>Ctrl+Shift+B</code> 打開）：</p>
+  <p><a class="bm" id="bm" href="#">噗浪新噗</a></p>
+  <p class="muted">拖不過去的話：按「複製書籤網址」，在書籤列按右鍵 →「新增網頁」，名稱填「噗浪新噗」，網址貼上。舊版書籤要刪掉換成新的，才會有三個榜。</p>
+  <p><button class="copy" data-for="bm">複製書籤網址</button><span class="msg muted"></span></p>
+  <p>想收藏噗之後回顧的話，把這個也拖到書籤列：</p>
+  <p><a class="bm" id="bm-save" href="#">收藏</a></p>
+  <p><button class="copy" data-for="bm-save">複製書籤網址</button><span class="msg muted"></span></p>
+
+  <h2>其他小工具</h2>
+  <p class="muted">一樣拖到書籤列就能用，任何網頁都可以點。只改目前這一頁的外觀，重新整理就恢復。</p>
+  <p><a class="bm" id="bm-nobg" href="javascript:(()=>{document.body.style.backgroundImage='none';document.body.style.backgroundColor='transparent';document.querySelectorAll('.bar-color').forEach(el=>el.classList.remove('bar-color'));})()">去背</a></p>
+  <p>拿掉頁面的背景圖片與背景色，並移除 <code>bar-color</code> 樣式。</p>
+  <p><button class="copy" data-for="bm-nobg">複製書籤網址</button><span class="msg muted"></span></p>
+  <p><a class="bm" id="bm-gray" href="javascript:(function(){var e=document.documentElement;e.style.filter=(e.style.filter==='grayscale(1)')?'':'grayscale(1)';})()">去CSS</a></p>
+  <p>把整頁切成黑白（灰階）；再點一次恢復彩色。</p>
+  <p><button class="copy" data-for="bm-gray">複製書籤網址</button><span class="msg muted"></span></p>
+
+  <h2>使用</h2>
+  <ol>
+    <li>打開 <code>https://www.plurk.com/top</code>，點書籤列的「噗浪新噗」，右側會跳出清單。</li>
+    <li>上方可以切換「回應／喜歡／轉噗／全部」，括號是各榜還沒看過的則數。一開始會停在你目前看的那個分頁；「全部」是三個榜合併、去掉重複。</li>
+    <li>點清單裡的噗，會在新分頁打開，並記成「已看」；不想點開的，按右邊的「已看」也可以。已看紀錄三個榜共用，在一個榜看過，其他榜也不會再出現。</li>
+    <li>第一次用時全部都算新的，可以先切到「全部」按「全部標為已看」，之後就只會看到新上榜的噗。</li>
+    <li>按「關鍵字」設定要隱藏的固定串，一行一個，例如 <code>台股閒聊噗</code>、<code>#直覺遊戲</code>。噗文內容包含任一行就會隱藏（不分大小寫）。</li>
+  </ol>
+
+  <h2>收藏</h2>
+  <ol>
+    <li>看完一則噗覺得之後想回顧，點書籤列的「收藏」，右上角會出現「★ 已收藏」。再點一次就是取消收藏。</li>
+    <li>單則噗的頁面（網址是 <code>plurk.com/p/…</code>）點了就直接收藏這一則。從新噗清單點開的、別人貼的連結都是這種頁面。</li>
+    <li>在河道上（例如偷偷說河道）點的話：有點開一則噗就收藏那一則；判斷不出是哪一則時，會列出畫面上的噗讓你挑，按「☆收藏」。</li>
+    <li>回顧：在排行榜點「噗浪新噗」，切到「★收藏」分頁。點噗會在新分頁打開；不要了就按「取消收藏」。</li>
+    <li>收藏過的噗不會出現在新噗清單裡。</li>
+  </ol>
+
+  <h2>說明</h2>
+  <ul>
+    <li>清單來自噗浪排行榜的 24 小時榜：最多人回應、最多人喜歡、最多人轉噗，每榜最多 90 則。</li>
+    <li>每則顯示：在哪幾個榜、排第幾，總回應／喜歡／轉噗數，以及發文多久了。發文超過一天的會標「舊噗」，方便判斷是不是剛好第一次看到的老噗。</li>
+    <li>「全部」依各榜中最好的名次排序，名次相同時，上越多榜的排前面。</li>
+    <li>已看紀錄和關鍵字存在這台電腦、這個瀏覽器的噗浪網站資料裡，換電腦或清除網站資料就會重來。已看紀錄保留 60 天；收藏不會自動刪，要自己取消。</li>
+    <li>只讀不寫：不會替你回噗、按喜歡或做任何操作。</li>
+  </ul>
+</main>
+
+<script type="text/plain" id="src">
+(async () => {
+  const SEEN = 'plurkNew.seen', KW = 'plurkNew.keywords', SAVED = 'plurkNew.saved', KEEP_DAYS = 60;
+  const BOARDS = [
+    { key: 'responded', api: 'topResponded', label: '回應', hash: '#topResponded' },
+    { key: 'favorites', api: 'topFavorites', label: '喜歡', hash: '#topFavorites' },
+    { key: 'replurks', api: 'topReplurks', label: '轉噗', hash: '#topReplurks' }
+  ];
+  if (location.hostname !== 'www.plurk.com') { alert('請在噗浪（www.plurk.com/top）頁面上點這個書籤'); return; }
+  const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
+  const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+  const now = Date.now();
+  const seen = load(SEEN, {});
+  for (const c in seen) if (now - seen[c] > KEEP_DAYS * 864e5) delete seen[c];
+  save(SEEN, seen);
+  let kws = load(KW, []);
+  // 收藏由「收藏」書籤寫入，永久保留；收藏過的噗不算新噗
+  let saved = load(SAVED, {});
+
+  // 三個榜一次抓完，切換時不用再等；同一則噗在多個榜上只留一筆，記下各榜的名次與熱度
+  const results = await Promise.allSettled(BOARDS.map(b => fetch('/Stats/' + b.api + '?period=day&lang=zh&limit=90').then(r => r.json())));
+  const byCode = {}, failed = [];
+  results.forEach((res, bi) => {
+    const b = BOARDS[bi];
+    if (res.status !== 'fulfilled' || !res.value.stats) { failed.push(b.label); return; }
+    res.value.stats.forEach(([score, p], i) => {
+      const code = p.plurk_id.toString(36);
+      const it = byCode[code] || (byCode[code] = {
+        code, on: {}, resp: p.response_count, fav: p.favorite_count, rep: p.replurkers_count,
+        hours: Math.max(0, Math.round((now - Date.parse(p.posted)) / 36e5)),
+        text: (p.content_raw || '').replace(/\s+/g, ' ').trim() || '（沒有文字）'
+      });
+      it.on[b.key] = { rank: i + 1, score };
+    });
+  });
+  const items = Object.values(byCode);
+  if (!items.length) { alert('抓不到排行榜資料' + (failed.length ? '（' + failed.join('、') + '）' : '')); return; }
+  const best = it => Math.min(...Object.values(it.on).map(o => o.rank));
+  const boardsOf = it => Object.keys(it.on).length;
+  const listOf = view => view === 'all'
+    ? items.slice().sort((a, b) => best(a) - best(b) || boardsOf(b) - boardsOf(a))
+    : items.filter(it => it.on[view]).sort((a, b) => a.on[view].rank - b.on[view].rank);
+
+  let view = (BOARDS.find(b => location.hash === b.hash) || BOARDS[0]).key;
+  let showHidden = false, editing = false;
+
+  document.getElementById('__pnew')?.remove();
+  const box = document.createElement('div');
+  box.id = '__pnew';
+  box.style.cssText = 'position:fixed;top:0;right:0;width:min(520px,100vw);height:100vh;z-index:2147483647;background:#fff;color:#222;box-shadow:-4px 0 16px rgba(0,0,0,.25);display:flex;flex-direction:column;font:14px/1.6 system-ui,"Microsoft JhengHei",sans-serif';
+  document.body.appendChild(box);
+
+  const el = (tag, css, text) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (text != null) e.textContent = text; return e; };
+  const btn = (text, fn, on) => { const b = el('button', 'font:inherit;padding:3px 10px;border:1px solid ' + (on ? '#ff574d' : '#ccc') + ';border-radius:5px;background:' + (on ? '#ff574d' : '#f6f6f6') + ';color:' + (on ? '#fff' : '#222') + ';cursor:pointer', text); b.onclick = fn; return b; };
+  const hit = it => { const t = it.text.toLowerCase(); return kws.find(k => t.includes(k.toLowerCase())); };
+  const age = h => h < 24 ? h + ' 小時前' : Math.round(h / 24) + ' 天前';
+  // 「收藏」書籤會在別的分頁寫入已看與收藏，寫入前先合併、畫面前先重讀，才不會蓋掉
+  const markSeen = code => { Object.assign(seen, load(SEEN, {})); seen[code] = Date.now(); save(SEEN, seen); };
+  const freshOf = v => listOf(v).filter(it => !seen[it.code] && !saved[it.code]);
+  const savedList = () => Object.entries(saved).map(([code, s]) => ({ code, text: s.t, at: s.at })).sort((a, b) => b.at - a.at);
+  const unsave = code => { const s = load(SAVED, {}); delete s[code]; save(SAVED, s); render(); };
+
+  const savedRow = s => {
+    const r = el('div', 'display:flex;gap:8px;align-items:flex-start;padding:8px 12px;border-bottom:1px solid #eee');
+    const a = el('a', 'flex:1;min-width:0;color:inherit;text-decoration:none');
+    a.href = 'https://www.plurk.com/p/' + s.code; a.target = '_blank'; a.rel = 'noopener';
+    a.append(
+      el('div', 'color:#888;font-size:12px', (h => h < 1 ? '剛剛收藏' : age(h) + '收藏')(Math.floor((Date.now() - s.at) / 36e5))),
+      el('div', 'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all', s.text)
+    );
+    r.append(a, btn('取消收藏', () => unsave(s.code)));
+    return r;
+  };
+
+  const row = (it, kw) => {
+    const r = el('div', 'display:flex;gap:8px;align-items:flex-start;padding:8px 12px;border-bottom:1px solid #eee' + (kw ? ';opacity:.55' : ''));
+    const a = el('a', 'flex:1;min-width:0;color:inherit;text-decoration:none');
+    a.href = 'https://www.plurk.com/p/' + it.code; a.target = '_blank'; a.rel = 'noopener';
+    const meta = el('div', 'color:#888;font-size:12px');
+    BOARDS.filter(b => it.on[b.key]).forEach(b => meta.appendChild(el('span', 'margin-right:6px;padding:0 5px;border-radius:3px;background:' + (b.key === view ? '#ffe3e1;color:#c0392b' : '#f0f0f0;color:#555'), b.label + ' #' + it.on[b.key].rank)));
+    meta.appendChild(document.createTextNode('回應 ' + it.resp + '　喜歡 ' + it.fav + '　轉噗 ' + it.rep + '　' + age(it.hours) + '發'));
+    if (it.hours >= 24) meta.appendChild(el('span', 'margin-left:6px;padding:0 5px;border-radius:3px;background:#eee;color:#666', '舊噗'));
+    if (kw) meta.appendChild(el('span', 'margin-left:6px;color:#c55', '（關鍵字：' + kw + '）'));
+    const txt = el('div', 'display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all', it.text);
+    a.append(meta, txt);
+    a.onclick = () => { markSeen(it.code); setTimeout(render, 0); };
+    r.append(a, btn('已看', () => { markSeen(it.code); render(); }));
+    return r;
+  };
+
+  const render = () => {
+    saved = load(SAVED, {});
+    Object.assign(seen, load(SEEN, {}));
+    if (view === 'saved') return renderSaved();
+    const all = listOf(view), fresh = freshOf(view);
+    const shown = fresh.filter(it => !hit(it)), hidden = fresh.filter(it => hit(it));
+    const head = header();
+    head.appendChild(el('div', 'font-size:16px;font-weight:700', '新噗 ' + shown.length + ' 則'));
+    head.appendChild(el('div', 'color:#888;font-size:12px', '這個榜共 ' + all.length + ' 則：已看過或收藏 ' + (all.length - fresh.length) + '、關鍵字隱藏 ' + hidden.length + (failed.length ? '｜抓不到：' + failed.join('、') : '')));
+    const bar = el('div', 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px');
+    bar.append(
+      btn('全部標為已看', () => { if (confirm('把目前顯示的 ' + shown.length + ' 則都標為已看？')) { Object.assign(seen, load(SEEN, {})); shown.forEach(it => seen[it.code] = Date.now()); save(SEEN, seen); render(); } }),
+      btn('關鍵字（' + kws.length + '）', () => { editing = !editing; render(); }),
+      btn(showHidden ? '收起被隱藏的' : '顯示被隱藏的', () => { showHidden = !showHidden; render(); }),
+      btn('關閉', () => box.remove())
+    );
+    head.appendChild(bar);
+    if (editing) {
+      const ta = el('textarea', 'display:block;width:100%;box-sizing:border-box;height:110px;margin-top:8px;font:inherit;padding:6px;border:1px solid #ccc;border-radius:5px');
+      ta.placeholder = '一行一個，例如：\n台股閒聊噗\n#直覺遊戲';
+      ta.value = kws.join('\n');
+      const ok = btn('儲存關鍵字', () => { kws = ta.value.split('\n').map(s => s.trim()).filter(Boolean); save(KW, kws); editing = false; render(); });
+      ok.style.marginTop = '6px';
+      head.append(ta, ok);
+    }
+    box.appendChild(head);
+    const list = el('div', 'flex:1;overflow:auto');
+    shown.forEach(it => list.appendChild(row(it)));
+    if (!shown.length) list.appendChild(el('div', 'padding:24px 12px;color:#888;text-align:center', '沒有新噗了'));
+    if (showHidden && hidden.length) {
+      list.appendChild(el('div', 'padding:6px 12px;background:#f3f3f3;color:#888;font-size:12px', '被關鍵字隱藏的 ' + hidden.length + ' 則'));
+      hidden.forEach(it => list.appendChild(row(it, hit(it))));
+    }
+    box.appendChild(list);
+  };
+
+  // 上方分頁列：三個榜、全部、收藏
+  function header() {
+    box.textContent = '';
+    const head = el('div', 'padding:10px 12px;border-bottom:1px solid #ddd;background:#fafafa');
+    const tabs = el('div', 'display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px');
+    [...BOARDS.map(b => [b.key, b.label]), ['all', '全部']].forEach(([k, label]) => {
+      const n = freshOf(k).filter(it => !hit(it)).length;
+      tabs.appendChild(btn(label + '（' + n + '）', () => { view = k; showHidden = false; render(); }, k === view));
+    });
+    tabs.appendChild(btn('★收藏（' + Object.keys(saved).length + '）', () => { view = 'saved'; render(); }, view === 'saved'));
+    head.appendChild(tabs);
+    return head;
+  }
+
+  function renderSaved() {
+    const head = header();
+    const list = savedList();
+    head.appendChild(el('div', 'font-size:16px;font-weight:700', '收藏 ' + list.length + ' 則'));
+    head.appendChild(el('div', 'color:#888;font-size:12px', '在單則噗的頁面或河道上按「收藏」書籤就會加到這裡'));
+    const bar = el('div', 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px');
+    bar.appendChild(btn('關閉', () => box.remove()));
+    head.appendChild(bar);
+    box.appendChild(head);
+    const body = el('div', 'flex:1;overflow:auto');
+    list.forEach(s => body.appendChild(savedRow(s)));
+    if (!list.length) body.appendChild(el('div', 'padding:24px 12px;color:#888;text-align:center', '還沒有收藏的噗'));
+    box.appendChild(body);
+  }
+  // 從別的分頁收藏完回來，清單跟著更新（正在編輯關鍵字時不動，免得打到一半被洗掉）
+  const onFocus = () => { if (!box.isConnected) return window.removeEventListener('focus', onFocus); if (!editing) render(); };
+  window.addEventListener('focus', onFocus);
+  render();
+})();
+</script>
+<script type="text/plain" id="src-save">
+(() => {
+  const SAVED = 'plurkNew.saved', SEEN = 'plurkNew.seen';
+  if (location.hostname !== 'www.plurk.com') { alert('請在噗浪（www.plurk.com）的噗上點這個書籤'); return; }
+  const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
+  const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
+  const clean = s => (s || '').replace(/\s+/g, ' ').trim();
+  const el = (tag, css, text) => { const e = document.createElement(tag); if (css) e.style.cssText = css; if (text != null) e.textContent = text; return e; };
+  const short = t => t.length > 40 ? t.slice(0, 40) + '…' : t;
+  const isSaved = code => !!load(SAVED, {})[code];
+
+  // 開關：沒收藏就收藏（順便記成已看），已收藏就取消；每次都重讀，避免蓋掉別的分頁剛寫的
+  // 回傳 true＝已收藏、false＝已取消、null＝存不進去
+  const toggle = (code, text) => {
+    const saved = load(SAVED, {});
+    if (saved[code]) { delete saved[code]; return save(SAVED, saved) ? false : null; }
+    saved[code] = { t: clean(text).slice(0, 200) || '（沒有文字）', at: Date.now() };
+    if (!save(SAVED, saved)) return null;
+    const seen = load(SEEN, {}); seen[code] = Date.now(); save(SEEN, seen);
+    return true;
+  };
+  const toast = msg => {
+    document.getElementById('__psave_t')?.remove();
+    const t = el('div', 'position:fixed;top:16px;right:16px;z-index:2147483647;max-width:360px;padding:10px 14px;border-radius:8px;background:#222;color:#fff;box-shadow:0 4px 16px rgba(0,0,0,.3);font:14px/1.6 system-ui,"Microsoft JhengHei",sans-serif', msg);
+    t.id = '__psave_t';
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 2500);
+  };
+  const flip = (code, text) => {
+    const r = toggle(code, text);
+    toast(r === null ? '沒存成功：瀏覽器不讓噗浪網站存資料（空間滿了或被封鎖）' : r ? '★ 已收藏：' + short(clean(text) || '（沒有文字）') : '已取消收藏');
+  };
+  document.getElementById('__psave')?.remove();
+
+  // 單則噗頁面 plurk.com/p/xxxx：網址就是答案
+  const m = location.pathname.match(/^\/p\/([0-9a-z]+)/);
+  if (m) {
+    const p = window.plurk;
+    const text = p && p.plurk_id && p.plurk_id.toString(36) === m[1] ? p.content_raw : document.querySelector('#permanent-plurk .text_holder')?.textContent;
+    flip(m[1], text);
+    return;
+  }
+
+  // 河道：找畫面上的噗；點開的那則（浮在河道上方的視窗裡）優先
+  const textOf = e => {
+    try { const p = PlurksManager.getPlurkById(+e.dataset.pid); if (p && p.content_raw) return p.content_raw; } catch (x) {}
+    return e.querySelector('.text_holder')?.textContent || '';
+  };
+  const inView = e => { const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0 && r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth; };
+  const floating = e => { for (let a = e.parentElement; a && a !== document.body; a = a.parentElement) if (getComputedStyle(a).position === 'fixed') return true; return false; };
+  // 同一則噗可能同時在河道和點開的視窗各有一份，先判斷點開的，再依噗代碼去重
+  const uniq = arr => { const s = {}; return arr.filter(e => !s[e.dataset.pid] && (s[e.dataset.pid] = 1)); };
+  const visible = [...document.querySelectorAll('.plurk[data-pid]')].filter(inView);
+  const opened = uniq(visible.filter(e => floating(e) || e.classList.contains('display')));
+  const onScreen = uniq(visible);
+  if (opened.length === 1) { flip((+opened[0].dataset.pid).toString(36), textOf(opened[0])); return; }
+  if (!onScreen.length) { toast('畫面上找不到噗。請在單則噗的頁面，或河道上點開一則噗後再按'); return; }
+
+  // 判斷不出點開的是哪一則：列出畫面上的噗讓你挑
+  const box = el('div', 'position:fixed;top:16px;right:16px;z-index:2147483647;width:min(420px,calc(100vw - 32px));max-height:70vh;display:flex;flex-direction:column;background:#fff;color:#222;border-radius:8px;box-shadow:0 4px 20px rgba(0,0,0,.3);font:14px/1.6 system-ui,"Microsoft JhengHei",sans-serif');
+  box.id = '__psave';
+  const head = el('div', 'display:flex;align-items:center;gap:8px;padding:8px 12px;border-bottom:1px solid #ddd;background:#fafafa');
+  head.appendChild(el('div', 'flex:1;font-weight:700', '要收藏畫面上的哪一則？'));
+  const x = el('button', 'font:inherit;padding:2px 10px;border:1px solid #ccc;border-radius:5px;background:#f6f6f6;color:#222;cursor:pointer', '關閉');
+  x.onclick = () => box.remove();
+  head.appendChild(x);
+  const list = el('div', 'overflow:auto');
+  onScreen.forEach(e => {
+    const code = (+e.dataset.pid).toString(36), text = textOf(e);
+    const r = el('div', 'display:flex;gap:8px;align-items:flex-start;padding:8px 12px;border-bottom:1px solid #eee');
+    r.appendChild(el('div', 'flex:1;min-width:0;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;word-break:break-all', clean(text) || '（沒有文字）'));
+    const b = el('button', 'font:inherit;padding:2px 10px;border:1px solid #ff574d;border-radius:5px;cursor:pointer;white-space:nowrap');
+    const paint = () => { const on = isSaved(code); b.textContent = on ? '★已收藏' : '☆收藏'; b.style.background = on ? '#ff574d' : '#fff'; b.style.color = on ? '#fff' : '#ff574d'; };
+    b.onclick = () => { flip(code, text); paint(); };
+    paint();
+    r.appendChild(b);
+    list.appendChild(r);
+  });
+  box.append(head, list);
+  document.body.appendChild(box);
+})();
+</script>
+<script>
+  const src = document.getElementById('src').textContent.trim();
+  const url = 'javascript:' + encodeURIComponent(src);
+  document.getElementById('bm').href = url;
+  document.getElementById('bm-save').href = 'javascript:' + encodeURIComponent(document.getElementById('src-save').textContent.trim());
+  document.querySelectorAll('.bm').forEach(a => a.onclick = e => { e.preventDefault(); alert('請把這個按鈕拖到書籤列，不要直接點。'); });
+  document.querySelectorAll('.copy').forEach(b => b.onclick = async () => {
+    const msg = b.nextElementSibling;
+    try { await navigator.clipboard.writeText(document.getElementById(b.dataset.for).getAttribute('href')); msg.textContent = '已複製'; }
+    catch (e) { msg.textContent = '複製失敗，請改用拖曳'; }
+  });
+</script>
+</body>
+</html>
