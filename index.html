@@ -62,18 +62,38 @@
     <li>收藏過的噗不會出現在新噗清單裡。</li>
   </ol>
 
+  <h2>跨電腦同步（選用）</h2>
+  <p class="muted">公司、家裡兩台電腦輪流用的話，可以把已看紀錄、收藏、關鍵字存到你自己 GitHub 帳號裡的一個私人 Gist，換台時按一下就帶過去。不設定也能照常使用。</p>
+  <ol>
+    <li>先產生金鑰：登入 GitHub 後打開 <a href="https://github.com/settings/personal-access-tokens/new" target="_blank" rel="noopener">github.com/settings/personal-access-tokens/new</a>。
+      <ul>
+        <li>Token name 填 <code>plurk-new</code>，Expiration 選 1 年。</li>
+        <li>Permissions → Account permissions → <strong>Gists</strong> 選「Read and write」，其他都不動。</li>
+        <li>按 Generate token，複製那串 <code>github_pat_…</code>。</li>
+      </ul>
+    </li>
+    <li>在排行榜點「噗浪新噗」，按側欄最下面的「☁ 設定同步」，貼上金鑰，按「測試並儲存」。兩台電腦都要各設定一次，用同一組金鑰就可以。</li>
+    <li>要離開這台前按底部的「上傳」；到另一台後按「下載」。看到「上傳 •」表示這台有還沒上傳的新紀錄。</li>
+  </ol>
+  <ul>
+    <li>上傳、下載都是合併，不會整份蓋掉；在一台取消收藏，另一台下載後也會取消。</li>
+    <li>關鍵字以最後修改的那台為準。</li>
+    <li>金鑰只存在這台電腦的噗浪網站資料裡，而且只能動 Gist，碰不到你的程式 repo。要換或停用，按底部的 ⚙。</li>
+    <li>金鑰過期時上傳會失敗並提示，照第 1 步再產生一組貼上即可。</li>
+  </ul>
+
   <h2>說明</h2>
   <ul>
     <li>清單來自噗浪排行榜的 24 小時榜：最多人回應、最多人喜歡、最多人轉噗，每榜最多 90 則。</li>
     <li>每則顯示：在哪幾個榜、排第幾，總回應／喜歡／轉噗數，以及發文多久了。發文超過一天的會標「舊噗」，方便判斷是不是剛好第一次看到的老噗。</li>
     <li>「全部」依各榜中最好的名次排序，名次相同時，上越多榜的排前面。</li>
-    <li>已看紀錄和關鍵字存在這台電腦、這個瀏覽器的噗浪網站資料裡，換電腦或清除網站資料就會重來。已看紀錄保留 60 天；收藏不會自動刪，要自己取消。</li>
-    <li>只讀不寫：不會替你回噗、按喜歡或做任何操作。</li>
+    <li>已看紀錄和關鍵字存在這台電腦、這個瀏覽器的噗浪網站資料裡，換電腦或清除網站資料就會重來（有設定同步的話，下載就能拿回來）。已看紀錄保留 60 天；收藏不會自動刪，要自己取消。</li>
+    <li>只讀不寫：不會替你回噗、按喜歡或做任何操作。同步只會寫你自己 GitHub 的那一個 Gist。</li>
   </ul>
 
   <h2>解除安裝</h2>
   <ol>
-    <li>在排行榜點「噗浪新噗」，按側欄最下面的「清除全部資料」，確認後會刪掉已看紀錄、收藏、關鍵字（噗浪的登入不受影響）。</li>
+    <li>在排行榜點「噗浪新噗」，按側欄最下面的「清除全部資料」，確認後會刪掉已看紀錄、收藏、關鍵字和同步金鑰（噗浪的登入不受影響）。有用同步的話，雲端的 Gist 不會刪，要刪請到 gist.github.com 自己刪。</li>
     <li>在書籤列的「噗浪新噗」「收藏」上按右鍵 →「刪除」。</li>
   </ol>
   <p class="muted">只刪書籤不會清掉資料，所以要先做第 1 步。</p>
@@ -82,6 +102,8 @@
 <script type="text/plain" id="src">
 (async () => {
   const SEEN = 'plurkNew.seen', KW = 'plurkNew.keywords', SAVED = 'plurkNew.saved', KEEP_DAYS = 60;
+  const UNSAVED = 'plurkNew.unsaved', KWAT = 'plurkNew.kwAt', SYNC = 'plurkNew.sync', DIRTY = 'plurkNew.dirty';
+  const GIST_NAME = 'plurk-new-sync', GIST_FILE = 'plurk-new-sync.json';
   const BOARDS = [
     { key: 'responded', api: 'topResponded', label: '回應', hash: '#topResponded' },
     { key: 'favorites', api: 'topFavorites', label: '喜歡', hash: '#topFavorites' },
@@ -136,24 +158,235 @@
   const hit = it => { const t = it.text.toLowerCase(); return kws.find(k => t.includes(k.toLowerCase())); };
   const age = h => h < 24 ? h + ' 小時前' : Math.round(h / 24) + ' 天前';
   // 「收藏」書籤會在別的分頁寫入已看與收藏，寫入前先合併、畫面前先重讀，才不會蓋掉
-  const markSeen = code => { Object.assign(seen, load(SEEN, {})); seen[code] = Date.now(); save(SEEN, seen); };
+  // 有任何會同步的資料變動就立旗標，底部「上傳 •」靠它判斷；「收藏」書籤也會立
+  const touch = () => { try { localStorage.setItem(DIRTY, '1'); } catch (e) {} };
+  const markSeen = code => { Object.assign(seen, load(SEEN, {})); seen[code] = Date.now(); save(SEEN, seen); touch(); };
   const freshOf = v => listOf(v).filter(it => !seen[it.code] && !saved[it.code]);
   const savedList = () => Object.entries(saved).map(([code, s]) => ({ code, text: s.t, at: s.at })).sort((a, b) => b.at - a.at);
-  const unsave = code => { const s = load(SAVED, {}); delete s[code]; save(SAVED, s); render(); };
+  // 取消收藏要留記號，另一台下載時才知道要刪，不然合併會把它加回來
+  const unsave = code => { const s = load(SAVED, {}); delete s[code]; save(SAVED, s); const u = load(UNSAVED, {}); u[code] = Date.now(); save(UNSAVED, u); touch(); render(); };
 
-  // 解除安裝用：清掉這工具存在噗浪網站資料裡的三樣東西，清完關掉側欄
+  const cfg = () => load(SYNC, {});
+  const setCfg = c => save(SYNC, c);
+  const n = o => Object.keys(o).length;
+  const empty = () => ({ seen: {}, saved: {}, unsaved: {}, kw: [], kwAt: 0 });
+  // 雲端的檔案可能被手動改過或是舊格式，缺的欄位補空值，型別不對就當空的
+  const norm = d => {
+    const obj = x => x && typeof x === 'object' && !Array.isArray(x) ? x : {};
+    return { seen: obj(d.seen), saved: obj(d.saved), unsaved: obj(d.unsaved), kw: Array.isArray(d.kw) ? d.kw.filter(k => typeof k === 'string') : [], kwAt: +d.kwAt || 0 };
+  };
+  const localData = () => norm({ seen: load(SEEN, {}), saved: load(SAVED, {}), unsaved: load(UNSAVED, {}), kw: load(KW, []), kwAt: load(KWAT, 0) });
+  // 兩台的時鐘不一定一致，以時間判斷「較新的動作」只是近似；手動同步、間隔長，實務上夠用
+  const merge = (a, b) => {
+    const cut = Date.now() - KEEP_DAYS * 864e5;
+    const seen = {}, saved = {}, unsaved = {};
+    for (const s of [a.seen, b.seen]) for (const c in s) if (s[c] > cut && !(seen[c] >= s[c])) seen[c] = s[c];
+    for (const s of [a.saved, b.saved]) for (const c in s) if (s[c] && (!saved[c] || s[c].at > saved[c].at)) saved[c] = s[c];
+    for (const s of [a.unsaved, b.unsaved]) for (const c in s) if (!(unsaved[c] >= s[c])) unsaved[c] = s[c];
+    for (const c in unsaved) {
+      if (saved[c] && saved[c].at > unsaved[c]) delete unsaved[c];
+      else { delete saved[c]; if (unsaved[c] <= cut) delete unsaved[c]; }
+    }
+    // 關鍵字不合併：合併的話一台刪掉的會被另一台加回來。兩邊都沒改過（舊資料，時間是 0）才取聯集，免得第一次同步就丟掉一邊
+    const kw = a.kwAt === b.kwAt ? (a.kwAt ? a.kw : [...new Set([...a.kw, ...b.kw])]) : (a.kwAt > b.kwAt ? a.kw : b.kw);
+    return { seen, saved, unsaved, kw, kwAt: Math.max(a.kwAt, b.kwAt) };
+  };
+  // 物件鍵和關鍵字的順序在兩台可能不同，排序後再比，才不會內容一樣卻亮「•」
+  const canon = d => JSON.stringify(['seen', 'saved', 'unsaved'].map(k => Object.keys(d[k]).sort().map(c => [c, d[k][c]])).concat([[...d.kw].sort(), d.kwAt]));
+  // 空間不夠時可能寫到一半失敗，留下一半新一半舊的資料（取消收藏的記號沒寫到，下次上傳就會把噗加回來），所以失敗要整組還原
+  const writeLocal = d => {
+    const keys = [[SEEN, d.seen], [SAVED, d.saved], [UNSAVED, d.unsaved], [KW, d.kw], [KWAT, d.kwAt]];
+    const old = keys.map(([k]) => localStorage.getItem(k));
+    try { keys.forEach(([k, v]) => localStorage.setItem(k, JSON.stringify(v))); }
+    catch (e) { keys.forEach(([k], i) => { try { old[i] === null ? localStorage.removeItem(k) : localStorage.setItem(k, old[i]); } catch (x) {} }); throw e; }
+  };
+
+  const gh = async (token, path, opt = {}) => {
+    let r;
+    try { r = await fetch('https://api.github.com' + path, { method: opt.method || 'GET', body: opt.body, headers: { Authorization: 'Bearer ' + token, Accept: 'application/vnd.github+json', ...(opt.body ? { 'Content-Type': 'application/json' } : {}) } }); }
+    catch (e) { throw new Error('連不上 GitHub，這台的資料沒有變動，稍後再試。'); }
+    if (r.status === 401) throw Object.assign(new Error('GitHub 說金鑰無效或已過期，請按 ⚙ 重新貼一組。'), { auth: true });
+    if (r.status === 403 || r.status === 429) throw new Error('GitHub 拒絕了：金鑰沒有 Gist 權限，或短時間內用太多次，稍後再試。');
+    if (r.status === 404) return null;
+    if (!r.ok) throw new Error('GitHub 回了錯誤（' + r.status + '），稍後再試。');
+    return r.json();
+  };
+  // 換電腦時第二台不知道 Gist 編號，用描述找回同一個，避免建出第二個
+  const findGist = async token => {
+    for (let p = 1; p <= 10; p++) {
+      const list = await gh(token, '/gists?per_page=100&page=' + p);
+      if (!list) return null;
+      const g = list.find(g => g.description === GIST_NAME && g.files && g.files[GIST_FILE]);
+      if (g) return g.id;
+      if (list.length < 100) return null;
+    }
+    return null;
+  };
+  const readGist = async (token, id) => {
+    const g = await gh(token, '/gists/' + id);
+    const f = g && g.files && g.files[GIST_FILE];
+    if (!f) return null;
+    // 超過 1 MB 時 API 只給前段，要另外抓原始檔
+    let text = f.content;
+    if (f.truncated) {
+      let r;
+      try { r = await fetch(f.raw_url); } catch (e) { throw new Error('連不上 GitHub，這台的資料沒有變動，稍後再試。'); }
+      // 錯誤頁的內容不是 JSON，不先擋掉會被當成「同步檔壞了」
+      if (!r.ok) throw new Error('GitHub 回了錯誤（' + r.status + '），稍後再試。');
+      text = await r.text();
+    }
+    try { return norm(JSON.parse(text)); } catch (e) { throw new Error('雲端的同步檔格式壞了，請到 gist.github.com 刪掉 ' + GIST_NAME + ' 再上傳一次。'); }
+  };
+  // 使用者可能在 gist.github.com 手動刪掉 Gist，記住的編號失效時要重找，不然上傳會一直失敗
+  const pull = async c => {
+    for (let i = 0; i < 2; i++) {
+      if (!c.gistId) { c.gistId = await findGist(c.token); setCfg(c); if (!c.gistId) return null; }
+      const d = await readGist(c.token, c.gistId);
+      if (d) return d;
+      c.gistId = null;
+    }
+    return null;
+  };
+
+  const upload = async () => {
+    const c = cfg(), cloud = await pull(c);
+    const m = merge(localData(), cloud || empty());
+    const files = { [GIST_FILE]: { content: JSON.stringify(m) } };
+    let g = c.gistId ? await gh(c.token, '/gists/' + c.gistId, { method: 'PATCH', body: JSON.stringify({ files }) }) : null;
+    if (!g) g = await gh(c.token, '/gists', { method: 'POST', body: JSON.stringify({ description: GIST_NAME, public: false, files }) });
+    if (!g) throw new Error('GitHub 拒絕了：金鑰沒有 Gist 寫入權限，請確認產生時 Gists 選了 Read and write。');
+    c.gistId = g.id;
+    // 抓雲端到現在之間，別的分頁可能又記了已看，再併一次才不會蓋掉
+    const now = merge(localData(), m);
+    writeLocal(now);
+    kws = now.kw;
+    c.lastUp = Date.now(); setCfg(c);
+    // 上傳過程中又有新變動就保留「•」
+    if (canon(now) === canon(m)) localStorage.removeItem(DIRTY);
+    return '已上傳\n已看 ' + n(m.seen) + '、收藏 ' + n(m.saved) + '、關鍵字 ' + m.kw.length;
+  };
+  const download = async () => {
+    const c = cfg(), cloud = await pull(c);
+    if (!cloud) throw new Error('雲端還沒有資料，請先在另一台電腦按「上傳」。');
+    const before = localData(), m = merge(before, cloud);
+    writeLocal(m);
+    kws = m.kw;
+    c.lastDown = Date.now(); setCfg(c);
+    if (canon(m) === canon(merge(cloud, empty()))) localStorage.removeItem(DIRTY); else touch();
+    const added = k => Object.keys(m[k]).filter(c => !(c in before[k])).length;
+    const gone = Object.keys(before.saved).filter(c => !(c in m.saved)).length;
+    const kwChanged = JSON.stringify(m.kw) !== JSON.stringify(before.kw);
+    const parts = [];
+    if (added('seen')) parts.push('新的已看 ' + added('seen'));
+    if (added('saved')) parts.push('新收藏 ' + added('saved'));
+    if (gone) parts.push('取消收藏 ' + gone);
+    if (kwChanged) parts.push('關鍵字已更新（' + m.kw.length + ' 個）');
+    return '已下載並合併\n' + (parts.length ? parts.join('、') : '這台已經是最新的');
+  };
+  const testToken = async token => {
+    const id = await findGist(token);
+    return { id, msg: id ? '已連上 GitHub，找到雲端的同步資料。\n按「下載」把另一台的紀錄帶進來。' : '已連上 GitHub。\n第一次按「上傳」時，會在你的帳號建一個私人 Gist「' + GIST_NAME + '」。' };
+  };
+
+  const toast = (msg, bad) => {
+    document.getElementById('__pnew_t')?.remove();
+    const t = el('div', 'position:fixed;bottom:48px;right:16px;z-index:2147483647;max-width:360px;padding:10px 14px;border-radius:8px;background:' + (bad ? '#b3261e' : '#222') + ';color:#fff;box-shadow:0 4px 16px rgba(0,0,0,.3);white-space:pre-line;font:14px/1.6 system-ui,"Microsoft JhengHei",sans-serif', msg);
+    t.id = '__pnew_t';
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), bad ? 8000 : 4000);
+  };
+  const ago = t => { if (!t) return '從沒'; const m = Math.round((Date.now() - t) / 6e4); return m < 1 ? '剛剛' : m < 60 ? m + ' 分鐘前' : m < 1440 ? Math.round(m / 60) + ' 小時前' : Math.round(m / 1440) + ' 天前'; };
+  // 連點會同時跑兩次上傳，後送出的會蓋掉先送出的；同步中重畫則會把「上傳中…」換回可以按的按鈕
+  let busy = false;
+  const act = async (b, label, fn) => {
+    if (busy) return;
+    busy = true; b.disabled = true; b.textContent = label + '中…';
+    try { toast(await fn()); }
+    catch (e) { toast(label + '失敗：' + (e && e.name === 'QuotaExceededError' ? '瀏覽器不讓噗浪網站存資料（空間滿了或被封鎖）' : e.message), true); }
+    busy = false;
+    if (box.isConnected) render();
+  };
+
+  const tokenHelp = () => {
+    const d = el('details', 'margin-top:6px;font-size:12px;color:#555');
+    d.appendChild(el('summary', 'cursor:pointer', '怎麼產生金鑰？（約 1 分鐘）'));
+    const ol = el('ol', 'margin:4px 0;padding-left:18px');
+    const li = el('li');
+    const a = el('a', 'color:#c0392b', 'github.com/settings/personal-access-tokens/new');
+    a.href = 'https://github.com/settings/personal-access-tokens/new'; a.target = '_blank'; a.rel = 'noopener';
+    li.append('登入 GitHub 後打開 ', a);
+    ol.appendChild(li);
+    ['Token name 填 plurk-new，Expiration 選 1 年', 'Permissions → Account permissions → Gists 選「Read and write」，其他都不動', '按 Generate token，複製那串 github_pat_… 貼到上面'].forEach(s => ol.appendChild(el('li', null, s)));
+    d.appendChild(ol);
+    return d;
+  };
+  let syncOpen = false;
+  const setupForm = () => {
+    const c = cfg();
+    const f = el('div', 'position:absolute;left:12px;right:12px;bottom:calc(100% + 4px);padding:10px 12px;background:#fffaf0;border:1px solid #f0d9a8;border-radius:6px;box-shadow:0 4px 20px rgba(0,0,0,.2);color:#222;font-size:14px;text-align:left');
+    f.appendChild(el('div', 'font-weight:700', c.token ? '同步設定（已設定）' : '設定同步（選用）'));
+    f.appendChild(el('div', 'font-size:12px;color:#666', '貼上 GitHub 金鑰，就能在不同電腦之間上傳／下載已看、收藏、關鍵字。不設定也能照常使用。金鑰只存在這台電腦。'));
+    const inp = el('input', 'display:block;width:100%;box-sizing:border-box;margin-top:6px;font:inherit;padding:4px 6px;border:1px solid #ccc;border-radius:5px');
+    inp.type = 'password'; inp.autocomplete = 'off';
+    inp.placeholder = c.token ? '已存一組金鑰；要換才貼新的' : 'github_pat_…';
+    f.append(inp, tokenHelp());
+    const bar = el('div', 'display:flex;gap:6px;margin-top:6px;flex-wrap:wrap');
+    const ok = btn('測試並儲存', async () => {
+      const token = inp.value.trim() || c.token;
+      if (!token) { toast('請先貼上金鑰', true); return; }
+      if (busy) return;
+      busy = true; ok.disabled = true; ok.textContent = '測試中…';
+      try {
+        const r = await testToken(token);
+        // 換了金鑰（可能是另一個帳號）就重新記 Gist，上傳／下載時間也歸零
+        setCfg(token === c.token ? { ...c, gistId: r.id || c.gistId } : { token, gistId: r.id });
+        // 剛設定時不知道雲端缺什麼，先亮「•」提醒上傳一次
+        if (token !== c.token) touch();
+        syncOpen = false;
+        toast(r.msg);
+      } catch (e) { toast('這組金鑰不能用：' + (e.auth ? 'GitHub 說金鑰無效或已過期，請確認整串都有複製到。' : e.message), true); }
+      busy = false;
+      if (box.isConnected) render();
+    }, true);
+    bar.appendChild(ok);
+    if (c.token) bar.appendChild(btn('停用同步', () => {
+      if (!confirm('停用同步？這台會刪掉存的金鑰，雲端和這台的已看、收藏都不受影響。')) return;
+      try { localStorage.removeItem(SYNC); } catch (e) {}
+      syncOpen = false; render();
+    }));
+    bar.appendChild(btn('取消', () => { syncOpen = false; render(); }));
+    f.appendChild(bar);
+    setTimeout(() => inp.focus(), 0);
+    return f;
+  };
+
+  // 解除安裝用：清掉這工具存在噗浪網站資料裡的所有東西（含同步金鑰），清完關掉側欄
   const wipe = () => {
-    const nSeen = Object.keys(load(SEEN, {})).length, nSaved = Object.keys(load(SAVED, {})).length, nKw = load(KW, []).length;
-    if (!confirm('清除「噗浪新噗」在這台電腦存的全部資料？\n\n・已看紀錄 ' + nSeen + ' 筆\n・收藏 ' + nSaved + ' 則\n・關鍵字 ' + nKw + ' 個\n\n清掉就找不回來。噗浪本身的登入不受影響。')) return;
-    try { [SEEN, KW, SAVED].forEach(k => localStorage.removeItem(k)); } catch (e) { alert('清除失敗：瀏覽器不讓噗浪網站改資料'); return; }
+    const nSeen = n(load(SEEN, {})), nSaved = n(load(SAVED, {})), nKw = load(KW, []).length;
+    if (!confirm('清除「噗浪新噗」在這台電腦存的全部資料？\n\n・已看紀錄 ' + nSeen + ' 筆\n・收藏 ' + nSaved + ' 則\n・關鍵字 ' + nKw + ' 個' + (cfg().token ? '\n・同步金鑰（雲端的資料不會刪）' : '') + '\n\n清掉就找不回來。噗浪本身的登入不受影響。')) return;
+    try { [SEEN, KW, SAVED, UNSAVED, KWAT, SYNC, DIRTY].forEach(k => localStorage.removeItem(k)); } catch (e) { alert('清除失敗：瀏覽器不讓噗浪網站改資料'); return; }
     box.remove();
     alert('已清除。不再使用的話，把書籤列上的「噗浪新噗」和「收藏」按右鍵刪除即可。');
   };
+  const link = (text, fn, strong) => { const b = el('button', 'font:inherit;font-size:12px;padding:0;border:0;background:none;cursor:pointer;text-decoration:underline;color:' + (strong ? '#ff574d;font-weight:700' : '#666'), text); b.onclick = () => fn(b); return b; };
   const footer = () => {
-    const f = el('div', 'padding:6px 12px;border-top:1px solid #eee;text-align:right');
-    const b = el('button', 'font:inherit;font-size:12px;padding:0;border:0;background:none;color:#999;text-decoration:underline;cursor:pointer', '清除全部資料');
-    b.onclick = wipe;
-    f.appendChild(b);
+    const f = el('div', 'position:relative;padding:6px 12px;border-top:1px solid #eee;display:flex;align-items:center;gap:8px;font-size:12px;color:#888');
+    const left = el('div', 'flex:1;display:flex;flex-wrap:wrap;gap:10px;align-items:center');
+    const c = cfg();
+    if (!c.token) left.append('☁', link('設定同步', () => { syncOpen = !syncOpen; render(); }));
+    else {
+      let dirty = false;
+      try { dirty = !!localStorage.getItem(DIRTY); } catch (e) {}
+      left.append('☁',
+        link('上傳' + (dirty ? ' •' : ''), b => act(b, '上傳', upload), dirty),
+        link('下載', b => act(b, '下載', download)),
+        el('span', null, '上傳 ' + ago(c.lastUp) + '・下載 ' + ago(c.lastDown)),
+        link('⚙', () => { syncOpen = !syncOpen; render(); }));
+    }
+    const clr = el('button', 'font:inherit;font-size:12px;padding:0;border:0;background:none;color:#999;text-decoration:underline;cursor:pointer', '清除全部資料');
+    clr.onclick = wipe;
+    f.append(left, clr);
+    if (syncOpen) f.appendChild(setupForm());
     return f;
   };
 
@@ -188,6 +421,7 @@
   const render = () => {
     saved = load(SAVED, {});
     Object.assign(seen, load(SEEN, {}));
+    if (!editing) kws = load(KW, []);
     if (view === 'saved') return renderSaved();
     const all = listOf(view), fresh = freshOf(view);
     const shown = fresh.filter(it => !hit(it)), hidden = fresh.filter(it => hit(it));
@@ -196,7 +430,7 @@
     head.appendChild(el('div', 'color:#888;font-size:12px', '這個榜共 ' + all.length + ' 則：已看過或收藏 ' + (all.length - fresh.length) + '、關鍵字隱藏 ' + hidden.length + (failed.length ? '｜抓不到：' + failed.join('、') : '')));
     const bar = el('div', 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px');
     bar.append(
-      btn('全部標為已看', () => { if (confirm('把目前顯示的 ' + shown.length + ' 則都標為已看？')) { Object.assign(seen, load(SEEN, {})); shown.forEach(it => seen[it.code] = Date.now()); save(SEEN, seen); render(); } }),
+      btn('全部標為已看', () => { if (confirm('把目前顯示的 ' + shown.length + ' 則都標為已看？')) { Object.assign(seen, load(SEEN, {})); shown.forEach(it => seen[it.code] = Date.now()); save(SEEN, seen); touch(); render(); } }),
       btn('關鍵字（' + kws.length + '）', () => { editing = !editing; render(); }),
       btn(showHidden ? '收起被隱藏的' : '顯示被隱藏的', () => { showHidden = !showHidden; render(); }),
       btn('關閉', () => box.remove())
@@ -206,7 +440,7 @@
       const ta = el('textarea', 'display:block;width:100%;box-sizing:border-box;height:110px;margin-top:8px;font:inherit;padding:6px;border:1px solid #ccc;border-radius:5px');
       ta.placeholder = '一行一個，例如：\n台股閒聊噗\n#直覺遊戲';
       ta.value = kws.join('\n');
-      const ok = btn('儲存關鍵字', () => { kws = ta.value.split('\n').map(s => s.trim()).filter(Boolean); save(KW, kws); editing = false; render(); });
+      const ok = btn('儲存關鍵字', () => { kws = ta.value.split('\n').map(s => s.trim()).filter(Boolean); save(KW, kws); save(KWAT, Date.now()); touch(); editing = false; render(); });
       ok.style.marginTop = '6px';
       head.append(ta, ok);
     }
@@ -249,15 +483,15 @@
     if (!list.length) body.appendChild(el('div', 'padding:24px 12px;color:#888;text-align:center', '還沒有收藏的噗'));
     box.append(body, footer());
   }
-  // 從別的分頁收藏完回來，清單跟著更新（正在編輯關鍵字時不動，免得打到一半被洗掉）
-  const onFocus = () => { if (!box.isConnected) return window.removeEventListener('focus', onFocus); if (!editing) render(); };
+  // 從別的分頁收藏完回來，清單跟著更新（正在編輯關鍵字、貼金鑰或同步中不動，免得打到一半被洗掉）
+  const onFocus = () => { if (!box.isConnected) return window.removeEventListener('focus', onFocus); if (!editing && !syncOpen && !busy) render(); };
   window.addEventListener('focus', onFocus);
   render();
 })();
 </script>
 <script type="text/plain" id="src-save">
 (() => {
-  const SAVED = 'plurkNew.saved', SEEN = 'plurkNew.seen';
+  const SAVED = 'plurkNew.saved', SEEN = 'plurkNew.seen', UNSAVED = 'plurkNew.unsaved', DIRTY = 'plurkNew.dirty';
   if (location.hostname !== 'www.plurk.com') { alert('請在噗浪（www.plurk.com）的噗上點這個書籤'); return; }
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
   const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
@@ -270,10 +504,18 @@
   // 回傳 true＝已收藏、false＝已取消、null＝存不進去
   const toggle = (code, text) => {
     const saved = load(SAVED, {});
-    if (saved[code]) { delete saved[code]; return save(SAVED, saved) ? false : null; }
+    // 取消收藏留記號（給跨電腦同步用），重新收藏就拿掉；「•」旗標讓側欄知道有東西還沒上傳
+    const unsaved = load(UNSAVED, {});
+    if (saved[code]) {
+      delete saved[code];
+      if (!save(SAVED, saved)) return null;
+      unsaved[code] = Date.now(); save(UNSAVED, unsaved); save(DIRTY, 1);
+      return false;
+    }
     saved[code] = { t: clean(text).slice(0, 200) || '（沒有文字）', at: Date.now() };
     if (!save(SAVED, saved)) return null;
-    const seen = load(SEEN, {}); seen[code] = Date.now(); save(SEEN, seen);
+    if (unsaved[code]) { delete unsaved[code]; save(UNSAVED, unsaved); }
+    const seen = load(SEEN, {}); seen[code] = Date.now(); save(SEEN, seen); save(DIRTY, 1);
     return true;
   };
   const toast = msg => {
