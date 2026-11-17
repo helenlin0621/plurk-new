@@ -146,6 +146,8 @@
 
   let view = (BOARDS.find(b => location.hash === b.hash) || BOARDS[0]).key;
   let showHidden = false, editing = false;
+  // 關鍵字輸入框每次重畫都會重建；打到一半的字先記在這裡，重畫後放回去，按「已看」或切換顯示才不會把字洗掉
+  let kwDraft = null;
 
   document.getElementById('__pnew')?.remove();
   const box = document.createElement('div');
@@ -350,6 +352,8 @@
     }, true);
     bar.appendChild(ok);
     if (c.token) bar.appendChild(btn('停用同步', () => {
+      // 上傳／下載收尾時會把設定整份寫回，這時刪金鑰會被蓋回來
+      if (busy) { toast('同步還在進行，等它跑完再停用。', true); return; }
       if (!confirm('停用同步？這台會刪掉存的金鑰，雲端和這台的已看、收藏都不受影響。')) return;
       try { localStorage.removeItem(SYNC); } catch (e) {}
       syncOpen = false; render();
@@ -362,6 +366,8 @@
 
   // 解除安裝用：清掉這工具存在噗浪網站資料裡的所有東西（含同步金鑰），清完關掉側欄
   const wipe = () => {
+    // 上傳／下載收尾時會把已看、收藏、金鑰整組寫回，這時清除等於沒清
+    if (busy) { toast('同步還在進行，等它跑完再清除。', true); return; }
     const nSeen = n(load(SEEN, {})), nSaved = n(load(SAVED, {})), nKw = load(KW, []).length;
     if (!confirm('清除「噗浪新噗」在這台電腦存的全部資料？\n\n・已看紀錄 ' + nSeen + ' 筆\n・收藏 ' + nSaved + ' 則\n・關鍵字 ' + nKw + ' 個' + (cfg().token ? '\n・同步金鑰（雲端的資料不會刪）' : '') + '\n\n清掉就找不回來。噗浪本身的登入不受影響。')) return;
     try { [SEEN, KW, SAVED, UNSAVED, KWAT, SYNC, DIRTY].forEach(k => localStorage.removeItem(k)); } catch (e) { alert('清除失敗：瀏覽器不讓噗浪網站改資料'); return; }
@@ -431,7 +437,7 @@
     const bar = el('div', 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px');
     bar.append(
       btn('全部標為已看', () => { if (confirm('把目前顯示的 ' + shown.length + ' 則都標為已看？')) { Object.assign(seen, load(SEEN, {})); shown.forEach(it => seen[it.code] = Date.now()); save(SEEN, seen); touch(); render(); } }),
-      btn('關鍵字（' + kws.length + '）', () => { editing = !editing; render(); }),
+      btn('關鍵字（' + kws.length + '）', () => { editing = !editing; kwDraft = null; render(); }),
       btn(showHidden ? '收起被隱藏的' : '顯示被隱藏的', () => { showHidden = !showHidden; render(); }),
       btn('關閉', () => box.remove())
     );
@@ -439,8 +445,9 @@
     if (editing) {
       const ta = el('textarea', 'display:block;width:100%;box-sizing:border-box;height:110px;margin-top:8px;font:inherit;padding:6px;border:1px solid #ccc;border-radius:5px');
       ta.placeholder = '一行一個，例如：\n台股閒聊噗\n#直覺遊戲';
-      ta.value = kws.join('\n');
-      const ok = btn('儲存關鍵字', () => { kws = ta.value.split('\n').map(s => s.trim()).filter(Boolean); save(KW, kws); save(KWAT, Date.now()); touch(); editing = false; render(); });
+      ta.value = kwDraft ?? kws.join('\n');
+      ta.oninput = () => { kwDraft = ta.value; };
+      const ok = btn('儲存關鍵字', () => { kws = ta.value.split('\n').map(s => s.trim()).filter(Boolean); save(KW, kws); save(KWAT, Date.now()); touch(); editing = false; kwDraft = null; render(); });
       ok.style.marginTop = '6px';
       head.append(ta, ok);
     }
