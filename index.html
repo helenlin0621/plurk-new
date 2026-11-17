@@ -101,6 +101,7 @@
 
 <script type="text/plain" id="src">
 (async () => {
+  try {
   const SEEN = 'plurkNew.seen', KW = 'plurkNew.keywords', SAVED = 'plurkNew.saved', KEEP_DAYS = 60;
   const UNSAVED = 'plurkNew.unsaved', KWAT = 'plurkNew.kwAt', SYNC = 'plurkNew.sync', DIRTY = 'plurkNew.dirty';
   const GIST_NAME = 'plurk-new-sync', GIST_FILE = 'plurk-new-sync.json';
@@ -111,7 +112,7 @@
   ];
   if (location.hostname !== 'www.plurk.com') { alert('請在噗浪（www.plurk.com/top）頁面上點這個書籤'); return; }
   const load = (k, d) => { try { return JSON.parse(localStorage.getItem(k)) || d; } catch (e) { return d; } };
-  const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} };
+  const save = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); return true; } catch (e) { return false; } };
   const now = Date.now();
   const seen = load(SEEN, {});
   for (const c in seen) if (now - seen[c] > KEEP_DAYS * 864e5) delete seen[c];
@@ -125,13 +126,17 @@
   const byCode = {}, failed = [];
   results.forEach((res, bi) => {
     const b = BOARDS[bi];
-    if (res.status !== 'fulfilled' || !res.value.stats) { failed.push(b.label); return; }
-    res.value.stats.forEach(([score, p], i) => {
+    if (res.status !== 'fulfilled' || !res.value || !Array.isArray(res.value.stats)) { failed.push(b.label); return; }
+    // 回應格式不是我們預期的（缺欄位、null）就跳過那一筆，不讓一筆壞資料拖垮整份清單
+    res.value.stats.forEach((entry, i) => {
+      if (!Array.isArray(entry) || !entry[1] || typeof entry[1].plurk_id !== 'number') return;
+      const [score, p] = entry;
       const code = p.plurk_id.toString(36);
+      const hrs = Math.round((now - Date.parse(p.posted)) / 36e5);
       const it = byCode[code] || (byCode[code] = {
-        code, on: {}, resp: p.response_count, fav: p.favorite_count, rep: p.replurkers_count,
-        hours: Math.max(0, Math.round((now - Date.parse(p.posted)) / 36e5)),
-        text: (p.content_raw || '').replace(/\s+/g, ' ').trim() || '（沒有文字）'
+        code, on: {}, resp: p.response_count || 0, fav: p.favorite_count || 0, rep: p.replurkers_count || 0,
+        hours: Number.isFinite(hrs) ? Math.max(0, hrs) : 0,
+        text: String(p.content_raw || '').replace(/\s+/g, ' ').trim() || '（沒有文字）'
       });
       it.on[b.key] = { rank: i + 1, score };
     });
@@ -162,11 +167,27 @@
   // 「收藏」書籤會在別的分頁寫入已看與收藏，寫入前先合併、畫面前先重讀，才不會蓋掉
   // 有任何會同步的資料變動就立旗標，底部「上傳 •」靠它判斷；「收藏」書籤也會立
   const touch = () => { try { localStorage.setItem(DIRTY, '1'); } catch (e) {} };
-  const markSeen = code => { Object.assign(seen, load(SEEN, {})); seen[code] = Date.now(); save(SEEN, seen); touch(); };
+  const saveFailed = () => toast('沒存成功：瀏覽器不讓噗浪網站存資料（空間滿了或被封鎖）', true);
+  // 寫入失敗時記憶體裡的已看也要退回，不然畫面看起來已看、下次重畫或換頁就又冒出來
+  const markSeen = code => {
+    Object.assign(seen, load(SEEN, {}));
+    const had = seen[code];
+    seen[code] = Date.now();
+    if (!save(SEEN, seen)) { if (had) seen[code] = had; else delete seen[code]; saveFailed(); return false; }
+    touch(); return true;
+  };
   const freshOf = v => listOf(v).filter(it => !seen[it.code] && !saved[it.code]);
   const savedList = () => Object.entries(saved).map(([code, s]) => ({ code, text: s.t, at: s.at })).sort((a, b) => b.at - a.at);
   // 取消收藏要留記號，另一台下載時才知道要刪，不然合併會把它加回來
-  const unsave = code => { const s = load(SAVED, {}); delete s[code]; save(SAVED, s); const u = load(UNSAVED, {}); u[code] = Date.now(); save(UNSAVED, u); touch(); render(); };
+  const unsave = code => {
+    const s = load(SAVED, {}), orig = JSON.stringify(s);
+    delete s[code];
+    if (!save(SAVED, s)) { saveFailed(); return; }
+    const u = load(UNSAVED, {}); u[code] = Date.now();
+    // 記號沒寫成功就把收藏放回去，否則另一台下載時會把它加回來而且這台無從得知
+    if (!save(UNSAVED, u)) { try { localStorage.setItem(SAVED, orig); } catch (e) {} saveFailed(); return; }
+    touch(); render();
+  };
 
   const cfg = () => load(SYNC, {});
   const setCfg = c => save(SYNC, c);
@@ -299,14 +320,22 @@
   };
   const ago = t => { if (!t) return '從沒'; const m = Math.round((Date.now() - t) / 6e4); return m < 1 ? '剛剛' : m < 60 ? m + ' 分鐘前' : m < 1440 ? Math.round(m / 60) + ' 小時前' : Math.round(m / 1440) + ' 天前'; };
   // 連點會同時跑兩次上傳，後送出的會蓋掉先送出的；同步中重畫則會把「上傳中…」換回可以按的按鈕
-  let busy = false;
+  // 同一頁再點一次書籤會重建側欄，舊實例的閉包變數管不到新側欄，所以旗標掛在 window 上讓各實例共用
+  const isBusy = () => !!window.__pnewBusy;
+  const setBusy = v => { window.__pnewBusy = v; };
+  // 舊實例跑完時自己的側欄已被移除，要請目前存在的那份重畫才看得到結果
+  const repaint = () => {
+    const cur = document.getElementById('__pnew');
+    if (!cur) return;
+    if (cur === box) render(); else if (window.__pnewRender) window.__pnewRender();
+  };
   const act = async (b, label, fn) => {
-    if (busy) return;
-    busy = true; b.disabled = true; b.textContent = label + '中…';
+    if (isBusy()) { toast('同步還在進行，等它跑完再按。', true); return; }
+    setBusy(true); b.disabled = true; b.textContent = label + '中…';
     try { toast(await fn()); }
     catch (e) { toast(label + '失敗：' + (e && e.name === 'QuotaExceededError' ? '瀏覽器不讓噗浪網站存資料（空間滿了或被封鎖）' : e.message), true); }
-    busy = false;
-    if (box.isConnected) render();
+    setBusy(false);
+    repaint();
   };
 
   const tokenHelp = () => {
@@ -336,8 +365,8 @@
     const ok = btn('測試並儲存', async () => {
       const token = inp.value.trim() || c.token;
       if (!token) { toast('請先貼上金鑰', true); return; }
-      if (busy) return;
-      busy = true; ok.disabled = true; ok.textContent = '測試中…';
+      if (isBusy()) { toast('同步還在進行，等它跑完再按。', true); return; }
+      setBusy(true); ok.disabled = true; ok.textContent = '測試中…';
       try {
         const r = await testToken(token);
         // 換了金鑰（可能是另一個帳號）就重新記 Gist，上傳／下載時間也歸零
@@ -347,13 +376,13 @@
         syncOpen = false;
         toast(r.msg);
       } catch (e) { toast('這組金鑰不能用：' + (e.auth ? 'GitHub 說金鑰無效或已過期，請確認整串都有複製到。' : e.message), true); }
-      busy = false;
-      if (box.isConnected) render();
+      setBusy(false);
+      repaint();
     }, true);
     bar.appendChild(ok);
     if (c.token) bar.appendChild(btn('停用同步', () => {
       // 上傳／下載收尾時會把設定整份寫回，這時刪金鑰會被蓋回來
-      if (busy) { toast('同步還在進行，等它跑完再停用。', true); return; }
+      if (isBusy()) { toast('同步還在進行，等它跑完再停用。', true); return; }
       if (!confirm('停用同步？這台會刪掉存的金鑰，雲端和這台的已看、收藏都不受影響。')) return;
       try { localStorage.removeItem(SYNC); } catch (e) {}
       syncOpen = false; render();
@@ -367,7 +396,7 @@
   // 解除安裝用：清掉這工具存在噗浪網站資料裡的所有東西（含同步金鑰），清完關掉側欄
   const wipe = () => {
     // 上傳／下載收尾時會把已看、收藏、金鑰整組寫回，這時清除等於沒清
-    if (busy) { toast('同步還在進行，等它跑完再清除。', true); return; }
+    if (isBusy()) { toast('同步還在進行，等它跑完再清除。', true); return; }
     const nSeen = n(load(SEEN, {})), nSaved = n(load(SAVED, {})), nKw = load(KW, []).length;
     if (!confirm('清除「噗浪新噗」在這台電腦存的全部資料？\n\n・已看紀錄 ' + nSeen + ' 筆\n・收藏 ' + nSaved + ' 則\n・關鍵字 ' + nKw + ' 個' + (cfg().token ? '\n・同步金鑰（雲端的資料不會刪）' : '') + '\n\n清掉就找不回來。噗浪本身的登入不受影響。')) return;
     try { [SEEN, KW, SAVED, UNSAVED, KWAT, SYNC, DIRTY].forEach(k => localStorage.removeItem(k)); } catch (e) { alert('清除失敗：瀏覽器不讓噗浪網站改資料'); return; }
@@ -436,7 +465,13 @@
     head.appendChild(el('div', 'color:#888;font-size:12px', '這個榜共 ' + all.length + ' 則：已看過或收藏 ' + (all.length - fresh.length) + '、關鍵字隱藏 ' + hidden.length + (failed.length ? '｜抓不到：' + failed.join('、') : '')));
     const bar = el('div', 'display:flex;flex-wrap:wrap;gap:6px;margin-top:6px');
     bar.append(
-      btn('全部標為已看', () => { if (confirm('把目前顯示的 ' + shown.length + ' 則都標為已看？')) { Object.assign(seen, load(SEEN, {})); shown.forEach(it => seen[it.code] = Date.now()); save(SEEN, seen); touch(); render(); } }),
+      btn('全部標為已看', () => {
+        if (!confirm('把目前顯示的 ' + shown.length + ' 則都標為已看？')) return;
+        Object.assign(seen, load(SEEN, {}));
+        shown.forEach(it => seen[it.code] = Date.now());
+        if (!save(SEEN, seen)) { shown.forEach(it => delete seen[it.code]); saveFailed(); return; }
+        touch(); render();
+      }),
       btn('關鍵字（' + kws.length + '）', () => { editing = !editing; kwDraft = null; render(); }),
       btn(showHidden ? '收起被隱藏的' : '顯示被隱藏的', () => { showHidden = !showHidden; render(); }),
       btn('關閉', () => box.remove())
@@ -447,7 +482,12 @@
       ta.placeholder = '一行一個，例如：\n台股閒聊噗\n#直覺遊戲';
       ta.value = kwDraft ?? kws.join('\n');
       ta.oninput = () => { kwDraft = ta.value; };
-      const ok = btn('儲存關鍵字', () => { kws = ta.value.split('\n').map(s => s.trim()).filter(Boolean); save(KW, kws); save(KWAT, Date.now()); touch(); editing = false; kwDraft = null; render(); });
+      const ok = btn('儲存關鍵字', () => {
+        const next = ta.value.split('\n').map(s => s.trim()).filter(Boolean), prev = load(KW, []);
+        // 失敗時不重畫也不關編輯，使用者打的字才留得住；關鍵字寫成功但時間沒寫成要退回，兩者不一致會讓同步誤判誰較新
+        if (!save(KW, next) || !save(KWAT, Date.now())) { save(KW, prev); saveFailed(); return; }
+        kws = next; touch(); editing = false; kwDraft = null; render();
+      });
       ok.style.marginTop = '6px';
       head.append(ta, ok);
     }
@@ -491,9 +531,11 @@
     box.append(body, footer());
   }
   // 從別的分頁收藏完回來，清單跟著更新（正在編輯關鍵字、貼金鑰或同步中不動，免得打到一半被洗掉）
-  const onFocus = () => { if (!box.isConnected) return window.removeEventListener('focus', onFocus); if (!editing && !syncOpen && !busy) render(); };
+  const onFocus = () => { if (!box.isConnected) return window.removeEventListener('focus', onFocus); if (!editing && !syncOpen && !isBusy()) render(); };
   window.addEventListener('focus', onFocus);
+  window.__pnewRender = render;
   render();
+  } catch (e) { alert('噗浪新噗出了預料之外的錯誤：' + (e && e.message ? e.message : e)); }
 })();
 </script>
 <script type="text/plain" id="src-save">
@@ -542,7 +584,9 @@
   const m = location.pathname.match(/^\/p\/([0-9a-z]+)/);
   if (m) {
     const p = window.plurk;
-    const text = p && p.plurk_id && p.plurk_id.toString(36) === m[1] ? p.content_raw : document.querySelector('#permanent-plurk .text_holder')?.textContent;
+    const api = p && p.plurk_id && p.plurk_id.toString(36) === m[1] && typeof p.content_raw === 'string' ? p.content_raw : '';
+    // content_raw 可能存在但是空的（頁面還沒填好），這時照規格改讀畫面上的文字
+    const text = clean(api) ? api : document.querySelector('#permanent-plurk .text_holder')?.textContent;
     flip(m[1], text);
     return;
   }
